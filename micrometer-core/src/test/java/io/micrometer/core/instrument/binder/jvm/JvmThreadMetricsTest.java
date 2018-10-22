@@ -15,13 +15,19 @@
  */
 package io.micrometer.core.instrument.binder.jvm;
 
-import java.util.concurrent.TimeUnit;
-
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 
+import java.lang.management.ThreadInfo;
+import java.lang.management.ThreadMXBean;
+import java.util.concurrent.TimeUnit;
+
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willReturn;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 
 /**
  * Tests for {@link JvmThreadMetrics}.
@@ -46,6 +52,23 @@ class JvmThreadMetricsTest {
 
         createTimedWaitingThread();
         assertThat(registry.get("jvm.threads.states").tag("state", "timed-waiting").gauge().value()).isGreaterThan(0);
+    }
+
+    @Test
+    void completedThreadsShouldBeIgnoredWhenCountingByStatus() {
+        ThreadMXBean mockThreadMXBean = mock(ThreadMXBean.class);
+        JvmThreadMetrics jvmThreadMetrics = spy(new JvmThreadMetrics());
+        willReturn(mockThreadMXBean).given(jvmThreadMetrics).getThreadMXBean();
+        long[] threadIds = {1, 2};
+        ThreadInfo threadInfo2 = mock(ThreadInfo.class);
+        given(threadInfo2.getThreadState()).willReturn(Thread.State.WAITING);
+        given(mockThreadMXBean.getAllThreadIds()).willReturn(threadIds);
+        given(mockThreadMXBean.getThreadInfo(threadIds)).willReturn(new ThreadInfo[] {null, threadInfo2});
+
+        MeterRegistry registry = new SimpleMeterRegistry();
+        jvmThreadMetrics.bindTo(registry);
+
+        assertThat(registry.get("jvm.threads.states").tag("state", "waiting").gauge().value()).isGreaterThan(0);
     }
 
     private void createTimedWaitingThread() {

@@ -26,6 +26,7 @@ import io.micrometer.core.lang.NonNullFields;
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
 import java.util.Arrays;
+import java.util.Objects;
 
 import static java.util.Collections.emptyList;
 
@@ -50,7 +51,7 @@ public class JvmThreadMetrics implements MeterBinder {
 
     @Override
     public void bindTo(MeterRegistry registry) {
-        ThreadMXBean threadBean = ManagementFactory.getThreadMXBean();
+        ThreadMXBean threadBean = getThreadMXBean();
 
         Gauge.builder("jvm.threads.peak", threadBean, ThreadMXBean::getPeakThreadCount)
             .tags(tags)
@@ -75,8 +76,13 @@ public class JvmThreadMetrics implements MeterBinder {
         }
     }
 
+    protected ThreadMXBean getThreadMXBean() {
+        return ManagementFactory.getThreadMXBean();
+    }
+
     private static long getThreadStateCount(ThreadMXBean threadBean, Thread.State state) {
         return Arrays.stream(threadBean.getThreadInfo(threadBean.getAllThreadIds()))
+                .filter(Objects::nonNull)
                 .filter(threadInfo -> threadInfo.getThreadState() == state)
                 .count();
     }
